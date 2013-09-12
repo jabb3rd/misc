@@ -1,0 +1,12 @@
+This is a set of tools for working with wordlists:
+
+bigger			Filter out the lines less than 8 characters long
+doubleyo.py		Make two variants for Russian words containing 'yo' characters: both with 'e' and 'yo'
+lowercase.py		Turn all words to lowercase
+mobilizer.py		Translate words as they could be typed on a mobile phone keyboard
+mutation.py		Simple wordlist mutation: all combinations of lower and upper case of characters for each line
+tanslit.py		Transliterate Russian words to English
+turnlayout.py		Write all Russian words in English layout (incorrect layout effect)
+uppercase.py		Turn all words to uppercase
+
+All the Python scripts are intended to work with UTF-8 locale. Please change the sources for you needs.
