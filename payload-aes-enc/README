@@ -1,0 +1,114 @@
+DESCRIPTION
+
+payload-crypter v0.1a
+
+This example shows how to prepare the decrypter with AES-encrypted payload,
+without the key stored in the resulting executable. The decryption key is brute
+forced when the executable is started.
+
+The FasmAES library is used to perform all the encryption/decryption operations.
+The idea for encryption is taken from Hyperion's papers. Hyperion itself is
+intended to encrypt Windows PE executables, and my example is for a binary
+payload encryption/decryption. The first is a more complex task that requires
+knowledge in PE file structure and how the things work.
+
+My example is just a small PoC and can be easily improved.
+
+WHAT HAPPENS IN THE EXAMPLE
+
+At the first step we generate a payload. I used Metasploit Framework to do this.
+
+The next step is to get the encrypted payload. We will prepend 4 bytes at the
+beginning just before the original payload to store the CRC-32 checksum.
+These 4 bytes + original payload - are padded with NOPs (opcode 0x90) to full
+block size (16 bytes). Then the CRC-32 of the original payload + padding NOPs
+is calculated and stored at the first 4 bytes.
+
+Then the blocks described above are encrypted with AES-128 key and dumped into
+'encrypted.dat' file. This file is included in binary form in 'decrypt.asm' using
+the 'file' directive.
+
+The decrypter, when built and run, decrypts the encrypted payload with brute
+forced key at each iteration, comparing if the CRC-32 of payload is the same
+as at the first 4 bytes of decrypted data. When the correct key has been found
+and CRC's been checked, the decrypter just jumps into the original (decrypted)
+payload.
+
+THE INSTRUCTIONS
+
+0. Prerequisites:
+Metasploit Framework, wine, fasm, ruby, upx
+
+To properly setup FASM for Linux, you have to do a couple of things:
+a) unpack 'fasm' from a linux version of fasm distribution archive, you don't
+need anything else from it, just one executable. Make it available from PATH
+environment - just copy it somewhere at a location existing in PATH or add the
+new location to the PATH.
+
+b) unpack 'INCLUDE' folder from the FASM for Windows distribution archive and
+place them somewhere (I'm using ~/.fasm/include for that puprose). Make an
+environment variable FASM point to their new location. I use in my ~/.bashrc:
+
+export FASM=~/.fasm/include
+
+Then you can use the following code in your .asm files:
+
+include '%FASM%\win32ax.inc'
+
+Unpack the FasmAES library and place to the directory where FASM environment
+variable points to.
+
+c) Make sure the names of the include files are in lowercase. This is important
+when you're using a case sensitive file system in Linux.
+
+The following script aims to solve this problem:
+
+#!/bin/bash
+for i in `find ./INCLUDE/ -maxdepth 0 -type d`; do mv -v $i `echo $i | tr 'A-Z' 'a-z'`; done
+for i in `find ./include/ -maxdepth 1 -type d`; do mv -v $i `echo $i | tr 'A-Z' 'a-z'`; done
+for i in `find ./include/ -type f`; do mv -v $i `echo $i | tr 'A-Z' 'a-z'`; done
+
+1. Generate a payload:
+
+msfpayload windows/exec CMD="calc.exe" R > exec_calc.bin
+
+2. Look at the source file 'crypt.asm' and edit the payload name there.
+Please notice the 'resource.inc' file: it has a declaration of manifest in it,
+which is located in 'manifest.xml' file. The purpose of the manifest is to
+elevate the privileges upon execution. If the UAC is enabled (it's enabled by
+default) - Windows Vista/7 will popup an UAC dialog window requesting the user
+to approve/deny the elevation.
+
+If you remove the manifest from the source - a privilege level will remain as
+the user's one, with no UAC-elevation requests. And there's a zero chance to gain
+NT AUTHORITY\SYSTEM if the payload is run non-elevated. Probably you'll have a
+chance to run an UAC bypass command from Meterpreter or something like that, but
+this works only if the targeted system doesn't have any AV installed.
+
+Finally, look at the Ruby source file 'random_key.rb'. It generates a pseudo-
+random 'weak' encryption key for AES by default, so you can adjust these
+constants:
+a) KEY_SIZE - that's the number of non-zero bytes - the remaining will be always
+zeroes.
+b) KEY_RANGE - each of these (value of KEY_SIZE) bytes can have a value from 0 to
+KEY_RANGE-1 (yes, they still may have zeroes though they called non-zero bytes -
+but this could be easily tweaked in the source).
+If you have adjusted any of above constants, make sure they have the same values
+in 'decrypt.asm'. The decryption algorithm doesn't know the key the payload is
+encrypted with, so it brute forces the key - that's why these two constants are
+important. The more the key length and the key range are - the more chance to
+remain undetected by AV's. For example, the resulting file is easily detected by
+Kaspersky Internet Security 2012 with KEY_SIZE = 4 and KEY_RANGE = 6.
+But the counter side of increasing the key's strength is the time needed to
+brute force the key, so the payload won't be decrypted in a reasonable time.
+
+3. Take a look at 'build.sh' to make it clear on what will happen, then run it:
+
+chmod +x build.sh
+./build.sh
+
+4. If everything works as expected, you will find the target file: 'decrypt.exe'
+
+LINKS
+
+http://www.nullsecurity.net/tools/cryptography/fasmaes-1.0.tar.gz
